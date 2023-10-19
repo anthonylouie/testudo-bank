@@ -1117,6 +1117,77 @@ public void testTransferPaysOverdraftAndDepositsRemainder() throws SQLException,
   }
 
   /**
+   * This test will test the interest feature that adds interest to a customer's balance.
+   * Interest is to be only added after the 5th deposit where the 5 deposits are is not in overdraft and value is at least 20 dollars.
+   * Test senarios are to ensure interest is applied after 5 transactions.
+   * Interest is not being continually applied after 5, count should reset.
+   * Interest only applies to deposits worth >= 20 dollars.
+   * 
+   * @throws SQLException
+   * @throws ScriptException
+   */
+  @Test
+  public void testInterestTransactionCases() throws SQLException, ScriptException {
+    // initialize customer1 with an overdraft balance of $123.45 (to make sure this works for non-whole dollar amounts). represented as pennies in the DB.
+    int CUSTOMER1_MAIN_BALANCE_IN_PENNIES = 0;
+    double CUSTOMER1_OVERDRAFT_BALANCE = 0;
+    int CUSTOMER1_OVERDRAFT_BALANCE_IN_PENNIES = MvcControllerIntegTestHelpers.convertDollarsToPennies(CUSTOMER1_OVERDRAFT_BALANCE);
+    int CUSTOMER1_NUM_FRAUD_REVERSALS = 0;
+    MvcControllerIntegTestHelpers.addCustomerToDB(dbDelegate, CUSTOMER1_ID, CUSTOMER1_PASSWORD, CUSTOMER1_FIRST_NAME, CUSTOMER1_LAST_NAME, CUSTOMER1_MAIN_BALANCE_IN_PENNIES, CUSTOMER1_OVERDRAFT_BALANCE_IN_PENNIES, CUSTOMER1_NUM_FRAUD_REVERSALS, 0);
+
+    // Prepare Deposit Form to Deposit $20 to customer 1's account.
+    double CUSTOMER1_AMOUNT_TO_DEPOSIT = 20; // user input is in dollar amount, not pennies.
+    User customer1DepositFormInputs = new User();
+    customer1DepositFormInputs.setUsername(CUSTOMER1_ID);
+    customer1DepositFormInputs.setPassword(CUSTOMER1_PASSWORD);
+    customer1DepositFormInputs.setAmountToDeposit(CUSTOMER1_AMOUNT_TO_DEPOSIT); 
+
+    // send request to the Deposit Form's POST handler in MvcController
+    controller.submitDeposit(customer1DepositFormInputs);
+
+    // fetch updated data from the DB
+    List<Map<String,Object>> customersTableData = jdbcTemplate.queryForList("SELECT * FROM Customers;");
+
+    // verify that customer's balance includes interest
+    Map<String,Object> customer1Data = customersTableData.get(0);
+    // verify interest count has increased with the $20 deposit
+    assertEquals(1, (int)customer1Data.get("NumDepositsForInterest"));
+    assertEquals(2000, (int)customer1Data.get("Balance"));
+
+    // Perform 4 more deposits to test interest calculation
+    controller.submitDeposit(customer1DepositFormInputs);
+    controller.submitDeposit(customer1DepositFormInputs);
+    controller.submitDeposit(customer1DepositFormInputs);
+    controller.submitDeposit(customer1DepositFormInputs);
+
+    // fetch updated data from the DB
+    customersTableData = jdbcTemplate.queryForList("SELECT * FROM Customers;");
+    customer1Data = customersTableData.get(0);
+    // verify that customer's balance includes interest
+    assertEquals(10150, (int)customer1Data.get("Balance"));
+    // verify that counter for interest has gone back to 0
+    assertEquals(0, (int)customer1Data.get("NumDepositsForInterest"));
+
+    double CUSTOMER1_DEPOSIT_UNDER_20 = 19.99;
+    customer1DepositFormInputs.setAmountToDeposit(CUSTOMER1_DEPOSIT_UNDER_20);
+    controller.submitDeposit(customer1DepositFormInputs);
+    // fetch updated data from the DB
+    customersTableData = jdbcTemplate.queryForList("SELECT * FROM Customers;");
+    customer1Data = customersTableData.get(0);
+    // verify interest count has not increased with a deposit under $20
+    assertEquals(0, (int)customer1Data.get("NumDepositsForInterest"));
+
+    double CUSTOMER1_DEPOSIT_OVER_20 = 20.01;
+    customer1DepositFormInputs.setAmountToDeposit(CUSTOMER1_DEPOSIT_OVER_20);
+    controller.submitDeposit(customer1DepositFormInputs);
+    // fetch updated data from the DB
+    customersTableData = jdbcTemplate.queryForList("SELECT * FROM Customers;");
+    customer1Data = customersTableData.get(0);
+    // verify interest count has increased with a deposit just over $20
+    assertEquals(1, (int)customer1Data.get("NumDepositsForInterest"));
+  }
+
+  /**
    * Enum for {@link CryptoTransactionTester}
    */
   @AllArgsConstructor
