@@ -92,6 +92,19 @@ CREATE TABLE CryptoHistory (
 '''
 cursor.execute(create_cryptohistory_table_sql)
 
+# Make empty Investments table
+create_investments_table_sql = '''
+CREATE TABLE Investments (
+  CustomerID varchar(255),
+  Type varchar(255),
+  StartDate DATETIME,
+  EndDate DATETIME,
+  Amount int,
+  InterestRate float
+);
+'''
+cursor.execute(create_investments_table_sql)
+
 
 
 # The two sets created below are used to ensure that this

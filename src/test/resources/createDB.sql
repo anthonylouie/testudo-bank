@@ -48,3 +48,12 @@ CREATE TABLE CryptoHistory (
   CryptoName varchar(255),
   CryptoAmount decimal(30,18)
 );
+
+CREATE TABLE Investments (
+  CustomerID varchar(255),
+  Type varchar(255),
+  StartDate DATETIME,
+  EndDate DATETIME,
+  Amount int,
+  InterestRate float
+);
