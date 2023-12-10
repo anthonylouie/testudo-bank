@@ -35,14 +35,14 @@
 </head>
 <body>
 	<div align="center">
-		<form:form action="withdraw" method="post" modelAttribute="user">
+		<form:form action="openCD" method="post" modelAttribute="user">
 			<form:label path="username">Username:</form:label>
 			<form:input path="username"/><br/>
 			
 			<form:label path="password">Password:</form:label>
 			<form:password path="password"/><br/><br>		
 
-      <span>Certificate of Deposit Price: $${user.cdPrice}</span><br/>	
+      <span>Certificate of Deposit Price: $1000.00</span><br/>	
 				
 			<form:button>Submit</form:button><br>
 		</form:form>
