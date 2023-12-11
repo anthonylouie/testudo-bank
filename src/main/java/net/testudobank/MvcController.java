@@ -51,6 +51,8 @@ public class MvcController {
   public static String CRYPTO_HISTORY_BUY_ACTION = "Buy";
   public static Set<String> SUPPORTED_CRYPTOCURRENCIES = new HashSet<>(Arrays.asList("ETH", "SOL"));
   private static double BALANCE_INTEREST_RATE = 1.015;
+  private static int CD_PRICE_IN_PENNIES = 100000;
+  private static double CD_INTEREST_RATE = 0.05;
 
   public MvcController(@Autowired JdbcTemplate jdbcTemplate, @Autowired CryptoPriceClient cryptoPriceClient) {
     this.jdbcTemplate = jdbcTemplate;
@@ -180,6 +182,21 @@ public class MvcController {
 		return "sellcrypto_form";
 	}
 
+  /**
+   * HTML GET request handler that serves the "invest" page to the user.
+   * An empty `User` object is also added to the Model as an Attribute to store
+   * the user's input option for investing.
+   * 
+   * @param model
+   * @return "cd_form" page
+   */
+  @GetMapping("/openCD")
+	public String showCDForm(Model model) {
+    User user = new User();
+		model.addAttribute("user", user);
+		return "cd_form";
+	}
+
   //// HELPER METHODS ////
 
   /**
@@ -281,6 +298,30 @@ public class MvcController {
     String userPassword = TestudoBankRepository.getCustomerPassword(jdbcTemplate, userID);
 
     if (userPasswordAttempt.equals(userPassword)) {
+      // Check if CD ends and add back money with interest
+      if (TestudoBankRepository.doesCustomerHaveCD(jdbcTemplate, userID)) {
+        try {
+          Date currDate = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(SQL_DATETIME_FORMATTER.format(new java.util.Date()));
+          Date cdEndDate = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").parse(TestudoBankRepository.getEndDateOfCD(jdbcTemplate, userID));
+
+          if (currDate.compareTo(cdEndDate) >= 0) {
+            // Calculate value of CD to be added back to customer's account
+            double interestRateOfCD = Double.parseDouble(TestudoBankRepository.getCDInterestRate(jdbcTemplate, userID));
+            int amountOfCD = Integer.parseInt(TestudoBankRepository.getCDAmount(jdbcTemplate, userID));
+            int balanceToBeAdded = ((int) (interestRateOfCD * amountOfCD)) + CD_PRICE_IN_PENNIES;
+            int userBalanceInPennies = TestudoBankRepository.getCustomerCashBalanceInPennies(jdbcTemplate, userID);
+            int newBalance = balanceToBeAdded + userBalanceInPennies;
+            // Update customer balance
+            TestudoBankRepository.setCustomerCashBalance(jdbcTemplate, userID, newBalance);
+            // Delete from Investments Table
+            TestudoBankRepository.deleteRowInInvestmentsTable(jdbcTemplate, userID);
+          }
+        } catch (Exception e) {
+
+        }
+        
+      }
+
       updateAccountInfo(user);
 
       return "account_info";
@@ -796,6 +837,65 @@ public class MvcController {
     } else {
       return "welcome";
     }
+  }
+
+  /**
+   * HTML POST request handler for the Invest Form page.
+   * 
+   * If the user is not currently in overdraft and the withdraw amount does not exceed the user's
+   * current main balance, the main balance is decremented by the amount specified
+   * 
+   * If the CD amount exceeds the user's current main balance, the transaction will not occur
+   * 
+   * If there is existing CD, then in overdraft, the entire withdraw amount with interest applied is added
+   * to the existing overdraft balance.
+   * 
+   * @param user
+   * @return "account_info" page if CD opening is valid. Otherwise, redirect to "welcome" page.
+   */
+  @PostMapping("/openCD")
+  public String submitCD(@ModelAttribute("user") User user) {
+    String userID = user.getUsername();
+    String userPasswordAttempt = user.getPassword();
+    String userPassword = TestudoBankRepository.getCustomerPassword(jdbcTemplate, userID);
+
+    //// Invalid Input/State Handling ////
+
+    // unsuccessful login
+    if (userPasswordAttempt.equals(userPassword) == false) {
+      return "welcome";
+    }
+
+    // If customer already has too many reversals, their account is frozen. Don't complete transaction.
+    int numOfReversals = TestudoBankRepository.getCustomerNumberOfReversals(jdbcTemplate, userID);
+    if (numOfReversals >= MAX_DISPUTES){
+      return "welcome";
+    }
+
+    // If customer already has CD opened, not allowed more than one. Don't complete transaction
+    boolean aleadyOpened = TestudoBankRepository.doesCustomerHaveCD(jdbcTemplate, userID);
+    if (aleadyOpened) {
+      return "welcome";
+    }
+
+    //// Check if customer has enough balance to open CD
+    int userBalanceInPennies = TestudoBankRepository.getCustomerCashBalanceInPennies(jdbcTemplate, userID);
+    if (userBalanceInPennies < CD_PRICE_IN_PENNIES) {
+      return "welcome";
+    }
+
+    //// Complete Open CD Transaction ////
+    String startDate = SQL_DATETIME_FORMATTER.format(new java.util.Date()); // use current date for record in investments table
+    String year = startDate.substring(0,4);
+    int yearAsNumber = Integer.parseInt(year);
+    String endDate =  Integer.toString(yearAsNumber + 1) + startDate.substring(4); // next year from current for end date
+    int newBalance = userBalanceInPennies - CD_PRICE_IN_PENNIES;
+    TestudoBankRepository.setCustomerCashBalance(jdbcTemplate, userID, newBalance);
+    TestudoBankRepository.insertRowToInvestmentsTable(jdbcTemplate, userID, "CD", startDate, endDate, CD_PRICE_IN_PENNIES, CD_INTEREST_RATE);
+  
+    // update Model so that View can access new main balance, overdraft balance, and logs
+    updateAccountInfo(user);
+    return "account_info";
   }
 
   /**
