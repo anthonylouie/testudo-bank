@@ -168,6 +168,44 @@ public class TestudoBankRepository {
     String cryptoHistorySql = "INSERT INTO CryptoHistory (CustomerID, Timestamp, Action, CryptoName, CryptoAmount) VALUES (?, ?, ?, ?, ?)";
     jdbcTemplate.update(cryptoHistorySql, customerID, timestamp, action, cryptoName, cryptoAmount);
   }
+
+  public static void insertRowToInvestmentsTable(JdbcTemplate jdbcTemplate, String customerID, String type, String startDate, String endDate, int amount, double interestRate) {
+    String investmentSql = "INSERT INTO Investments VALUES (?,?,?,?,?,?)";
+    jdbcTemplate.update(investmentSql, customerID, type, startDate, endDate, amount, interestRate);
+  }
+
+  public static void deleteRowInInvestmentsTable(JdbcTemplate jdbcTemplate, String customerID) {
+    String deleteRowFromInvestmentsTableSql = String.format("DELETE from Investments where CustomerID='%s';", customerID);
+    jdbcTemplate.update(deleteRowFromInvestmentsTableSql);
+  }
+
+  public static String getCDInterestRate(JdbcTemplate jdbcTemplate, String customerID) {
+    String interstRateSql = String.format("SELECT InterestRate FROM Investments WHERE CustomerID='%s';", customerID);
+    String result = jdbcTemplate.queryForObject(interstRateSql, String.class);
+    return result;
+  }
+
+  public static String getCDAmount(JdbcTemplate jdbcTemplate, String customerID) {
+    String interstRateSql = String.format("SELECT Amount FROM Investments WHERE CustomerID='%s';", customerID);
+    String result = jdbcTemplate.queryForObject(interstRateSql, String.class);
+    return result;
+  }
+
+  public static boolean doesCustomerHaveCD(JdbcTemplate jdbcTemplate, String customerID) { 
+    String customerExistsSql =  String.format("SELECT count(*) FROM Investments WHERE CustomerID='%s';", customerID);
+    String result = jdbcTemplate.queryForObject(customerExistsSql, String.class);
+    if (Integer.parseInt(result) != 0) {
+     return true;
+    } else {
+      return false;
+    }
+  }
+
+  public static String getEndDateOfCD(JdbcTemplate jdbcTemplate, String customerID) {
+    String customerExistsSql =  String.format("SELECT EndDate FROM Investments WHERE CustomerID='%s';", customerID);
+    String result = jdbcTemplate.queryForObject(customerExistsSql, String.class);
+    return result;
+  }
   
   public static boolean doesCustomerExist(JdbcTemplate jdbcTemplate, String customerID) { 
     String getCustomerIDSql =  String.format("SELECT CustomerID FROM Customers WHERE CustomerID='%s';", customerID);
